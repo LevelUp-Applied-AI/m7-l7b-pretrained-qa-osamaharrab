@@ -1,0 +1,28 @@
+{
+  "em": 0.8,
+  "f1": 0.8990476190476192,
+  "n": 30,
+  "per_pattern": {
+    "control": {
+      "em": 1.0,
+      "f1": 1.0,
+      "n": 3
+    },
+    "late-distractor": {
+      "em": 0.8888888888888888,
+      "f1": 0.9777777777777779,
+      "n": 9
+    },
+    "role-swap": {
+      "em": 0.5,
+      "f1": 0.6714285714285715,
+      "n": 8
+    },
+    "same-type-distractor": {
+      "em": 0.9,
+      "f1": 0.9800000000000001,
+      "n": 10
+    }
+  },
+  "model": "distilbert-base-cased-distilled-squad"
+}

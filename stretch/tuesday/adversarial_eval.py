@@ -17,16 +17,24 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import lab  # noqa: E402
 
 
+STRETCH_DIR = os.path.dirname(__file__)
+
+
 def load_adversarial_set(path: str = "stretch/tuesday/adversarial_set.csv") -> pd.DataFrame:
     """
     Load the adversarial test set CSV.
 
     Verifies columns: qid, question, context, gold_answer, pattern_tag.
     """
-    # TODO: read the CSV at the given path
-    # TODO: verify all five required columns exist; raise a clear error if any are missing
-    # TODO: return the DataFrame
-    raise NotImplementedError("load_adversarial_set not implemented")
+    if path == "stretch/tuesday/adversarial_set.csv":
+        path = os.path.join(STRETCH_DIR, "adversarial_set.csv")
+
+    df = pd.read_csv(path)
+    required = {"qid", "question", "context", "gold_answer", "pattern_tag"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"{path} is missing required columns: {sorted(missing)}")
+    return df
 
 
 def evaluate_adversarial(qa, df: pd.DataFrame) -> dict:
@@ -40,11 +48,31 @@ def evaluate_adversarial(qa, df: pd.DataFrame) -> dict:
           "predictions": [ ... lab.evaluate_qa-shaped entries plus pattern_tag ... ],
         }
     """
-    # TODO: call lab.evaluate_qa for the aggregate metrics + predictions list
-    # TODO: enrich each prediction with its pattern_tag (lookup from df by qid)
-    # TODO: compute per-pattern aggregates (group by pattern_tag, mean em + f1, count)
-    # TODO: return the combined dict
-    raise NotImplementedError("evaluate_adversarial not implemented")
+    result = lab.evaluate_qa(qa, df)
+    tag_by_qid = dict(zip(df["qid"], df["pattern_tag"]))
+
+    predictions = []
+    for pred in result["predictions"]:
+        enriched = dict(pred)
+        enriched["pattern_tag"] = tag_by_qid[enriched["qid"]]
+        predictions.append(enriched)
+
+    pred_df = pd.DataFrame(predictions)
+    per_pattern = {}
+    for tag, group in pred_df.groupby("pattern_tag", sort=True):
+        per_pattern[tag] = {
+            "em": float(group["em"].mean()),
+            "f1": float(group["f1"].mean()),
+            "n": int(len(group)),
+        }
+
+    return {
+        "em": result["em"],
+        "f1": result["f1"],
+        "n": result["n"],
+        "per_pattern": per_pattern,
+        "predictions": predictions,
+    }
 
 
 def main() -> None:
@@ -54,7 +82,7 @@ def main() -> None:
     result = evaluate_adversarial(qa, df)
 
     pred_df = pd.DataFrame(result["predictions"])
-    pred_df.to_csv("stretch/tuesday/adversarial_predictions.csv", index=False)
+    pred_df.to_csv(os.path.join(STRETCH_DIR, "adversarial_predictions.csv"), index=False)
 
     metrics = {
         "em": result["em"],
@@ -63,7 +91,7 @@ def main() -> None:
         "per_pattern": result["per_pattern"],
         "model": lab.get_qa_model_name(),
     }
-    with open("stretch/tuesday/adversarial_metrics.json", "w") as f:
+    with open(os.path.join(STRETCH_DIR, "adversarial_metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)
 
     print(f"Aggregate EM = {result['em']:.4f}")

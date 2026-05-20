@@ -8,6 +8,7 @@ import json
 import os
 import re
 import string
+from collections import Counter
 
 import pandas as pd
 
@@ -54,15 +55,15 @@ def load_examples(data_path: str) -> pd.DataFrame:
 
 def normalize_answer(s: str) -> str:
     """SQuAD-style normalization (see drill / reading)."""
-    # TODO: apply the four-step SQuAD normalization (lowercase, strip articles, strip punctuation, collapse whitespace);
-    #       remember the article strip needs word-boundary regex
-    raise NotImplementedError("normalize_answer not implemented")
+    s = str(s).lower()
+    s = re.sub(r"\b(a|an|the)\b", " ", s)
+    s = "".join(ch for ch in s if ch not in string.punctuation)
+    return " ".join(s.split())
 
 
 def exact_match(pred: str, gold: str) -> int:
     """Return 1 if normalized prediction equals normalized gold."""
-    # TODO: compare normalized values, return int
-    raise NotImplementedError("exact_match not implemented")
+    return int(normalize_answer(pred) == normalize_answer(gold))
 
 
 def token_f1(pred: str, gold: str) -> float:
@@ -74,16 +75,31 @@ def token_f1(pred: str, gold: str) -> float:
       - one empty -> 0.0
     Returns float in [0.0, 1.0]; never NaN.
     """
-    # TODO: normalize, split, handle empty, compute multiset overlap, return F1
-    raise NotImplementedError("token_f1 not implemented")
+    pred_tokens = normalize_answer(pred).split()
+    gold_tokens = normalize_answer(gold).split()
+
+    if not pred_tokens and not gold_tokens:
+        return 1.0
+    if not pred_tokens or not gold_tokens:
+        return 0.0
+
+    overlap = Counter(pred_tokens) & Counter(gold_tokens)
+    num_same = sum(overlap.values())
+    if num_same == 0:
+        return 0.0
+
+    precision = num_same / len(pred_tokens)
+    recall = num_same / len(gold_tokens)
+    return 2 * precision * recall / (precision + recall)
 
 
 # -- Task 2: Build the QA pipeline -------------------------------------------
 
 def build_qa_pipeline(model_name: str):
     """Construct a Hugging Face question-answering pipeline."""
-    # TODO: build a question-answering pipeline using the given model name (same as the drill)
-    raise NotImplementedError("build_qa_pipeline not implemented")
+    from transformers import pipeline
+
+    return pipeline("question-answering", model=model_name, tokenizer=model_name)
 
 
 # -- Task 3: Predict one answer ---------------------------------------------
@@ -94,8 +110,8 @@ def predict_one(qa, question: str, context: str) -> str:
 
     Returns the answer STRING only (not the full pipeline output dict).
     """
-    # TODO: invoke the pipeline on the (question, context) pair and return only the predicted answer string
-    raise NotImplementedError("predict_one not implemented")
+    result = qa(question=str(question), context=str(context))
+    return str(result.get("answer", ""))
 
 
 # -- Task 4: Evaluate over the dataset ---------------------------------------
@@ -116,9 +132,39 @@ def evaluate_qa(qa, examples: pd.DataFrame) -> dict:
         }
     context_excerpt is the first 80 chars of the context (CSV-friendly).
     """
-    # TODO: iterate over examples, call predict_one, compute em + f1
-    # TODO: build predictions list, aggregate em/f1, return
-    raise NotImplementedError("evaluate_qa not implemented")
+    predictions = []
+    em_scores = []
+    f1_scores = []
+
+    for _, row in examples.iterrows():
+        question = str(row["question"])
+        context = str(row["context"])
+        gold = str(row["gold_answer"])
+        predicted = predict_one(qa, question, context)
+        em = exact_match(predicted, gold)
+        f1 = token_f1(predicted, gold)
+
+        em_scores.append(em)
+        f1_scores.append(f1)
+        predictions.append(
+            {
+                "qid": row["qid"],
+                "question": question,
+                "context_excerpt": context[:80],
+                "gold_answer": gold,
+                "predicted_answer": predicted,
+                "em": em,
+                "f1": f1,
+            }
+        )
+
+    n = len(predictions)
+    return {
+        "em": float(sum(em_scores) / n) if n else 0.0,
+        "f1": float(sum(f1_scores) / n) if n else 0.0,
+        "n": n,
+        "predictions": predictions,
+    }
 
 
 # -- Task 5: Orchestrate -----------------------------------------------------
